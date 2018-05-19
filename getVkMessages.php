@@ -1,11 +1,5 @@
 <?php
 
-/**
- * Created by PhpStorm.
- * User: Myrmal
- * Date: 10.05.2018
- * Time: 20:46
- */
 class getVkMessages
 {
     /*Для работы скрипта необходимо вставить токен группы и id_сообщества*/
@@ -26,32 +20,75 @@ class getVkMessages
     //массив полученой истории
     private $result_history = [];
 
-    /*Функция получение даты в unixtime*/
-
-    function getDate()
+    private function validPost()
     {
-        if(!is_numeric($_POST["day"]) || !is_numeric($_POST["day"]) || !is_numeric($_POST["day"])){
+        if (empty($_POST["day"]) || empty($_POST["month"]) || empty($_POST["year"]))
+        {
+            die("Заполните все поля");
+        }elseif(!is_numeric($_POST["day"]) || !is_numeric($_POST["month"]) || !is_numeric($_POST["year"]))
+        {
             die("Дата должна быть в числовом значении");
         }
+    }
+
+    /*Функция получение даты в unixtime*/
+
+    private function getDate()
+    {
         $this -> time_start = mktime(0,0,0,$_POST["month"],$_POST["day"],$_POST["year"]);
         $this -> time_end = mktime(23,59,59,$_POST["month"],$_POST["day"],$_POST["year"]);
         return;
+    }
+
+    /*Функция доступа к API*/
+
+    private function getAPI($string)
+    {
+        @$api = (file_get_contents($string))
+        or die ("Файл API недоступен. Попробуйте позже или сообщите администратору");
+        $result = json_decode($api);
+        $result = $result -> response -> items;
+        return $result;
+    }
+
+    /*вывод результата*/
+    private function returnView ($count_answer_time)
+    {
+        if (!$count_answer_time) {die("Ответов в этот день не обнаружено");}
+        echo "<p>Среднее время ответа "
+            .floor( ( array_sum ($count_answer_time) / count ($count_answer_time) ) / 60 ).
+            " минут </p>";
+        echo "<p>Минимальное время ответа "
+            .floor( min($count_answer_time) /60 ).
+            " минут</p>";
+        echo "<p>Максимальное время ответа "
+            .floor ( max($count_answer_time) /60 ).
+            " минут</p>";
+    }
+
+    /*вывод ссылок на диалоги с временем ответа >15 минут*/
+    private function returnLinks ($array_links)
+    {
+        echo "<div><p>Ссылки на диалоги с временем ответа >15 минут:</p>";
+        for ($i = 0; $i < count($array_links); $i++)
+        {
+            echo "<p><a href='".$array_links[$i]."'>$array_links[$i]</a></p>";
+        }
+        echo "</div>";
     }
 
     /*
      * Функция поиска всех сообщений до определенной даты
      */
 
-    function runSearch()
+    private function runSearch()
     {
-        $this->getDate();
+        $this -> validPost();
+        $this -> getDate();
         $time_offset = time() - $this->time_start;
-        @$api =
-            (file_get_contents
-            ("https://api.vk.com/method/messages.get?offset=$this->offset&rev=1&count=$this->count&time_offset=$time_offset&v=5.52&access_token=$this->token"))
-        or die("Файл сообщений недоступен. Попробуйте позже или сообщите администратору");
-        $messages = json_decode($api);
-        $messages = $messages->response->items;
+        $messages = $this->getAPI("https://api.vk.com/method/messages.get?offset=$this->offset&rev=1&count=$this->count&time_offset=$time_offset&v=5.52&access_token=$this->token");
+
+        if (!$messages){die("Данных по этому дню не обнаружено");}
 
         foreach ($messages as $val)
         {
@@ -74,19 +111,14 @@ class getVkMessages
      * $uniq_user_id - массив уникальных user_id
      */
 
-    function getHistory($array_messages)
+    private function getHistory($array_messages)
     {
         $uniq_user_id = [];
         for ($i = 0; $i < count ($array_messages); $i++)
         {
             if(!in_array($array_messages[$i]->user_id,$uniq_user_id)){
                 array_push($uniq_user_id,$array_messages[$i]->user_id);
-                @$apihistory =
-                    (file_get_contents
-                    ("https://api.vk.com/method/messages.getHistory?user_id={$array_messages[$i]->user_id}&rev=1&v=5.74&access_token=$this->token"))
-                or die("Файл диалогов недоступен. Попробуйте позже или сообщите администратору");
-                $history = json_decode($apihistory);
-                $history = $history->response->items;
+                $history = $this->getAPI("https://api.vk.com/method/messages.getHistory?user_id={$array_messages[$i]->user_id}&rev=1&count=200&v=5.74&access_token=$this->token");
                 foreach ($history as $val)
                 {
                     $this->result_history[] = $val;
@@ -106,12 +138,15 @@ class getVkMessages
      * $array_links массив ссылок на диалоги с временем ответа >15 минут
      */
 
-    function returnHistory($history)
+    private function returnHistory($history)
     {
         $income_time = 0;
         $out_time = 0;
         $count_answer_time = [];
         $array_links=[];
+
+        print_r($this->time_start);
+        print_r($this->time_end);
 
         for ($i = 0; $i < count($history); $i++)
         {
@@ -142,29 +177,16 @@ class getVkMessages
                 }
             }
         }
-        echo "<p>Среднее время ответа "
-            .floor( ( array_sum ($count_answer_time) / count ($count_answer_time) ) / 60 ).
-            " минут </p>";
-        echo "<p>Минимальное время ответа "
-            .floor( min($count_answer_time) /60 ).
-            " минут</p>";
-        echo "<p>Максимальное время ответа "
-            .floor ( max($count_answer_time) /60 ).
-            " минут</p>";
+        $this->returnView($count_answer_time);
 
         if ($array_links)
         {
-            echo "<div><p>Ссылки на диалоги с временем ответа >15 минут:</p>";
-            for ($i = 0; $i < count($array_links); $i++)
-            {
-                echo "<p><a href='".$array_links[$i]."'>$array_links[$i]</a></p>";
-            }
-            echo "</div>";
+            $this->returnLinks($array_links);
         }
         return;
     }
 
-    function runThis()
+    public function runThis()
     {
         $this->returnHistory($this->getHistory($this->runSearch()));
         return;
