@@ -25,7 +25,10 @@ class getVkMessages
         if (empty($_POST["day"]) || empty($_POST["month"]) || empty($_POST["year"]))
         {
             die("Заполните все поля");
-        }elseif(!is_numeric($_POST["day"]) || !is_numeric($_POST["month"]) || !is_numeric($_POST["year"]))
+        }
+        elseif(!filter_var($_POST["day"], FILTER_VALIDATE_INT)|| 
+                !filter_var($_POST["month"], FILTER_VALIDATE_INT)||
+                !filter_var($_POST["year"], FILTER_VALIDATE_INT))
         {
             die("Дата должна быть в числовом значении");
         }
